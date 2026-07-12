@@ -1,0 +1,53 @@
+diff -Naur ./ext/intl/config.m4 ../php-7.4.33/ext/intl/config.m4
+--- ./ext/intl/config.m4	2026-06-24 03:55:52.798877019 +0200
++++ ../php-7.4.33/ext/intl/config.m4	2026-06-24 05:23:25.075845876 +0200
+@@ -83,7 +83,13 @@
+     breakiterator/codepointiterator_methods.cpp"
+ 
+   PHP_REQUIRE_CXX()
+-  PHP_CXX_COMPILE_STDCXX(11, mandatory, PHP_INTL_STDCXX)
++  PHP_CXX_COMPILE_STDCXX(17, optional, PHP_INTL_STDCXX)
++  if test -z "$PHP_INTL_STDCXX"; then
++    PHP_CXX_COMPILE_STDCXX(14, optional, PHP_INTL_STDCXX)
++  fi
++  if test -z "$PHP_INTL_STDCXX"; then
++    PHP_CXX_COMPILE_STDCXX(11, mandatory, PHP_INTL_STDCXX)
++  fi
+   PHP_INTL_CXX_FLAGS="$INTL_COMMON_FLAGS $PHP_INTL_STDCXX $ICU_CXXFLAGS"
+   if test "$ext_shared" = "no"; then
+     PHP_ADD_SOURCES(PHP_EXT_DIR(intl), $PHP_INTL_CXX_SOURCES, $PHP_INTL_CXX_FLAGS)
+diff -Naur ./ext/libxml/libxml.c ../php-7.4.33/ext/libxml/libxml.c
+--- ./ext/libxml/libxml.c	2026-06-24 03:55:52.686163095 +0200
++++ ../php-7.4.33/ext/libxml/libxml.c	2026-06-24 03:56:11.084349366 +0200
+@@ -473,10 +473,16 @@
+ 	return(ret);
+ }
+ 
++#if LIBXML_VERSION >= 21200
+ static xmlOutputBufferPtr
+ php_libxml_output_buffer_create_filename(const char *URI,
+-                              xmlCharEncodingHandlerPtr encoder,
+-                              int compression ATTRIBUTE_UNUSED)
++                               xmlCharEncodingHandlerPtr encoder)
++#else
++static xmlOutputBufferPtr
++php_libxml_output_buffer_create_filename(const char *URI,
++                               xmlCharEncodingHandlerPtr encoder,
++                               int compression ATTRIBUTE_UNUSED)
++#endif
+ {
+ 	xmlOutputBufferPtr ret;
+ 	xmlURIPtr puri;
+diff -Naur ./ext/openssl/openssl.c ../php-7.4.33/ext/openssl/openssl.c
+--- ./ext/openssl/openssl.c	2026-06-24 03:55:52.681219328 +0200
++++ ../php-7.4.33/ext/openssl/openssl.c	2026-06-24 04:15:57.493088360 +0200
+@@ -1517,7 +1517,9 @@
+ 	REGISTER_LONG_CONSTANT("PKCS7_NOSIGS", PKCS7_NOSIGS, CONST_CS|CONST_PERSISTENT);
+ 
+ 	REGISTER_LONG_CONSTANT("OPENSSL_PKCS1_PADDING", RSA_PKCS1_PADDING, CONST_CS|CONST_PERSISTENT);
++#if OPENSSL_VERSION_NUMBER < 0x30000000L
+ 	REGISTER_LONG_CONSTANT("OPENSSL_SSLV23_PADDING", RSA_SSLV23_PADDING, CONST_CS|CONST_PERSISTENT);
++#endif
+ 	REGISTER_LONG_CONSTANT("OPENSSL_NO_PADDING", RSA_NO_PADDING, CONST_CS|CONST_PERSISTENT);
+ 	REGISTER_LONG_CONSTANT("OPENSSL_PKCS1_OAEP_PADDING", RSA_PKCS1_OAEP_PADDING, CONST_CS|CONST_PERSISTENT);
+ 
