@@ -1,0 +1,1324 @@
+diff -Naur ./Makefile ../bitchx-1.2.1-patched/Makefile
+--- ./Makefile	2013-11-07 04:00:24.000000000 +0100
++++ ../bitchx-1.2.1-patched/Makefile	2026-07-14 04:07:30.054258592 +0200
+@@ -1,5 +1,5 @@
+ 
+-SHELL = /usr/local/bin/bash
++SHELL = /bin/sh
+ 
+ default:
+-	$(SHELL) ./configure
++	$(SHELL) ./configure --with-plugins
+diff -Naur ./dll/aim/cmd.c ../bitchx-1.2.1-patched/dll/aim/cmd.c
+--- ./dll/aim/cmd.c	2013-06-26 15:09:01.000000000 +0200
++++ ../bitchx-1.2.1-patched/dll/aim/cmd.c	2026-07-14 04:05:40.408612627 +0200
+@@ -23,6 +23,11 @@
+ #include <module.h>
+ #include <modval.h>
+ 
++/* UPDATE_ALL constant from input.h for update_input() */
++#ifndef UPDATE_ALL
++#define UPDATE_ALL 1
++#endif
++
+ #include <string.h>
+ #include <stdlib.h>
+ #include <stdio.h>
+@@ -682,7 +687,7 @@
+ 		tmp->query_cmd = m_strdup("amsg");
+ #undef query_nick
+ 		tmp->query_nick = m_strdup(n);
+-		update_input(tmp);
++		update_input(UPDATE_ALL);
+ #endif
+ 	} else {
+ #undef query_cmd	
+diff -Naur ./dll/aim/toc/interface.c ../bitchx-1.2.1-patched/dll/aim/toc/interface.c
+--- ./dll/aim/toc/interface.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/dll/aim/toc/interface.c	2026-07-14 04:05:40.408765712 +0200
+@@ -9,6 +9,7 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <time.h>
++#include <string.h>
+ #include "toc.h"
+ 
+ int (*TOC_RAW_HANDLERS[30])(int, char *); 
+diff -Naur ./dll/aim/toc/server.c ../bitchx-1.2.1-patched/dll/aim/toc/server.c
+--- ./dll/aim/toc/server.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/dll/aim/toc/server.c	2026-07-14 04:05:40.408896136 +0200
+@@ -476,7 +476,7 @@
+ 	sflap_send(buf, -1, TYPE_DATA);
+ }
+ 
+-int check_idle() {
++int check_idle(void *clientData, char *callbackMsg) {
+ 	time_t t;
+ 
+ 	time(&t);
+diff -Naur ./dll/aim/toc/toc.h ../bitchx-1.2.1-patched/dll/aim/toc/toc.h
+--- ./dll/aim/toc/toc.h	2008-05-07 13:07:31.000000000 +0200
++++ ../bitchx-1.2.1-patched/dll/aim/toc/toc.h	2026-07-14 04:05:40.409033849 +0200
+@@ -200,7 +200,7 @@
+ void serv_dir_search(char *first, char *middle, char *last, char *maiden, char *city, char *state, char *country, char *email);
+ void serv_touch_idle();
+ void serv_set_idle(int time);
+-int check_idle();
++int check_idle(void *clientData, char *callbackMsg);
+ void serv_set_away(char *message);
+ 
+ extern int idle_timer;
+diff -Naur ./dll/aim/toc.c ../bitchx-1.2.1-patched/dll/aim/toc.c
+--- ./dll/aim/toc.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/dll/aim/toc.c	2026-07-14 04:05:40.409157610 +0200
+@@ -34,7 +34,7 @@
+ /* LIBToc Call back functions */
+ 
+ int toc_add_input_stream(int fd,int (*func)(int)) {
+-	sock_read_id = add_socketread(fd, 0, 0, "bleh", func, func);	
++	sock_read_id = add_socketread(fd, 0, 0, "bleh", (void(*)(int))func, (void(*)(int))func);
+         return 1;
+ }
+ 
+diff -Naur ./dll/arcfour/arcfour.c ../bitchx-1.2.1-patched/dll/arcfour/arcfour.c
+--- ./dll/arcfour/arcfour.c	2013-07-13 23:53:24.000000000 +0200
++++ ../bitchx-1.2.1-patched/dll/arcfour/arcfour.c	2026-07-14 04:05:40.409276710 +0200
+@@ -202,8 +202,11 @@
+ 		memset(buf, 0, sizeof(buf));
+ 		if ((len = dgets(buf, s, 1, BIG_BUFFER_SIZE, NULL)) > 0) {
+ 			if (!my_strnicmp("SecureDCC", buf, 9)) {
++				char *tmpbuf = buf;
++				char *key;
+ 				tmpbox->inbox = (arckey *)new_malloc(sizeof(arckey));
+-       	arcfourInit(tmpbox->inbox, next_arg(buf, &buf), 16);
++				key = next_arg(tmpbuf, &tmpbuf);
++       	arcfourInit(tmpbox->inbox, key, 16);
+ 			}
+ 		}
+ 		return 0;
+@@ -244,7 +247,7 @@
+ 	new_s = accept(s, (struct sockaddr *) &remaddr, &sra);
+ 	type = flags & DCC_TYPES;
+ 	n = get_socketinfo(s);
+-	if ((add_socketread(new_s, ntohs(remaddr.sin_port), flags, nick, get_dcc_encrypt, NULL)) < 0)
++	if ((add_socketread(new_s, ntohs(remaddr.sin_port), flags, nick, (void(*)(int))get_dcc_encrypt, NULL)) < 0)
+ 	{
+ 		erase_dcc_info(s, 0, "%s", convert_output_format("$G %RDCC error: accept() failed. punt!!", NULL, NULL));
+ 		close_socketread(s);
+diff -Naur ./dll/blowfish/blowfish.c ../bitchx-1.2.1-patched/dll/blowfish/blowfish.c
+--- ./dll/blowfish/blowfish.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/dll/blowfish/blowfish.c	2026-07-14 04:05:40.409418220 +0200
+@@ -365,8 +365,8 @@
+ 		blowbox[i].lastuse = 0L;
+ 	}
+ #ifdef WANT_TCL
+-	Tcl_CreateCommand(tcl_interp, "encrypt", tcl_encrypt, NULL, NULL);
+-	Tcl_CreateCommand(tcl_interp, "decrypt", tcl_decrypt, NULL, NULL);
++	Tcl_CreateCommand(tcl_interp, "encrypt", (Tcl_CmdProc *)tcl_encrypt, NULL, NULL);
++	Tcl_CreateCommand(tcl_interp, "decrypt", (Tcl_CmdProc *)tcl_decrypt, NULL, NULL);
+ 	Tcl_SetVar(tcl_interp, "blowfish_version", blowfish_version, TCL_GLOBAL_ONLY);
+ #endif
+ 	add_module_proc(ALIAS_PROC, "blowfish", "encrypt", "Blowfish Encryption", 0, 0, ircii_encrypt, NULL);
+diff -Naur ./dll/europa/europa.c ../bitchx-1.2.1-patched/dll/europa/europa.c
+--- ./dll/europa/europa.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/dll/europa/europa.c	2026-07-14 04:05:40.409547754 +0200
+@@ -357,14 +357,10 @@
+   put_it("** Europa v%s connecting to database backend...", MOD_VERSION);
+ 
+   /* connect to the database server */
+-  if(!(mysql_connect(&mysql, DBHOST, DBUSER, DBPASSWD))) {
++   if(!mysql_real_connect(&mysql, DBHOST, DBUSER, DBPASSWD, DBNAME, 0, NULL, 0)) {
+     put_it("** Server refused login/password.");
+     return 0;
+   }
+-  if(mysql_select_db(&mysql, DBNAME)) {
+-    put_it("** Server refused connection to '%s' database.", DBNAME);
+-    return 0;
+-  }
+ 
+   put_it("** Europa loaded!");
+   return 0;
+diff -Naur ./dll/fserv/fserv.c ../bitchx-1.2.1-patched/dll/fserv/fserv.c
+--- ./dll/fserv/fserv.c	2013-11-16 11:59:34.000000000 +0100
++++ ../bitchx-1.2.1-patched/dll/fserv/fserv.c	2026-07-14 04:05:40.409726492 +0200
+@@ -992,7 +992,7 @@
+ 			}
+ 		}
+ 	}
+-	add_timer(0, empty_string, timer * 1000, 1, impress_me, NULL, NULL, -1, "fserv");
++	add_timer(0, empty_string, timer * 1000, 1, (int(*)(void*,char*))impress_me, NULL, NULL, -1, "fserv");
+ 	new_free(&ch);
+ }
+ 
+@@ -1177,7 +1177,7 @@
+ 
+ 	add_completion_type("fsload", 3, FILE_COMPLETION);
+ 
+-	add_timer(0, empty_string, get_dllint_var("fserv_time"), 1, impress_me, NULL, NULL, -1, "fserv");
++	add_timer(0, empty_string, get_dllint_var("fserv_time"), 1, (int(*)(void*,char*))impress_me, NULL, NULL, -1, "fserv");
+ 	strmcpy(FSstr, cparse(FS, NULL, NULL), sizeof(FSstr) - 1);
+ 	put_it("%s %s", FSstr, convert_output_format("$0 v$1 by panasync.", "%s %s", fserv_version, AUTO_VERSION));
+ 	sprintf(buffer, "$0+%s by panasync - $2 $3", fserv_version);
+diff -Naur ./doc/Makefile ../bitchx-1.2.1-patched/doc/Makefile
+--- ./doc/Makefile	2013-11-07 04:00:24.000000000 +0100
++++ ../bitchx-1.2.1-patched/doc/Makefile	2026-07-14 04:06:17.801501156 +0200
+@@ -1,5 +1,5 @@
+ 
+-SHELL = /usr/local/bin/bash
++SHELL = /bin/sh
+ 
+ default:
+ 	$(SHELL) ./configure --with-plugins
+diff -Naur ./include/misc.h ../bitchx-1.2.1-patched/include/misc.h
+--- ./include/misc.h	2012-02-10 12:22:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/include/misc.h	2026-07-14 04:05:40.410022905 +0200
+@@ -127,10 +127,6 @@
+ 	BanList		*eban_is_on_channel(register char *, register ChannelList *);
+ 	void		check_orig_nick(char *);
+ 
+-	char		*do_nslookup (char *, char *, char *, char *, int, void (*func)(), char *);
+-	void		set_nslookupfd(fd_set *);
+-	long		print_nslookup(fd_set *);
+-	void		auto_nslookup();
+ 	int		freadln(FILE *, char *);
+ 
+ 
+@@ -210,18 +206,22 @@
+ 	char	*channel;
+ 	char	*command;
+ 	int	server;
+-	void	(*func)();
++	void	(*func)(struct reslist *);
+ };
+ 
+ struct	hostent	*ar_answer(char *, int, void (*func)(struct reslist *) );
+ void    ar_close(void);
+ int     ar_delete(char *, int);
+-int     ar_gethostbyname(char *, char *, int, char *, char *, char *, char *, int, void (*func)(), char *);
+-int     ar_gethostbyaddr(char *, char *, int, char *, char *, char *, char *, int, void (*func)(), char *);
++int     ar_gethostbyname(char *, char *, int, char *, char *, char *, char *, int, void (*func)(struct reslist *), char *);
++int     ar_gethostbyaddr(char *, char *, int, char *, char *, char *, char *, int, void (*func)(struct reslist *), char *);
+ int     ar_init(int);
+ int     ar_open(void);
+ long    ar_timeout(time_t, char *, int, void (*func)(struct reslist *) );
+ void	ar_rename_nick(char *, char *, int);
++	void		auto_nslookup(struct reslist *);
++	char		*do_nslookup(char *, char *, char *, char *, int, void (*func)(struct reslist *), char *);
++	void		set_nslookupfd(fd_set *);
++	long		print_nslookup(fd_set *);
+ #endif
+ 
+ #ifndef	MIN
+diff -Naur ./include/modval.h ../bitchx-1.2.1-patched/include/modval.h
+--- ./include/modval.h	2013-11-18 13:38:07.000000000 +0100
++++ ../bitchx-1.2.1-patched/include/modval.h	2026-07-14 04:05:40.410168636 +0200
+@@ -398,7 +398,7 @@
+ #define do_hook (*(int (*)(int, char *, ...))global[HOOK])
+ 
+ /* input.c */
+-#define update_input (*(void (*)(int ))global[FUNC_UPDATE_INPUT])
++#define update_input (*(void (*)(int))global[FUNC_UPDATE_INPUT])
+ #define cursor_to_input (*(void (*)(void ))global[CURSOR_TO_INPUT])
+ #define set_input (*(void (*)(char *))global[SET_INPUT])
+ #define get_input (*(char *(*)(void ))global[GET_INPUT])
+diff -Naur ./include/tcl_bx.h ../bitchx-1.2.1-patched/include/tcl_bx.h
+--- ./include/tcl_bx.h	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/include/tcl_bx.h	2026-07-14 04:05:40.410334515 +0200
+@@ -10,15 +10,24 @@
+ int handle_dcc_bot (int, char *);
+ int handle_tcl_chan (int, char *, char *, char *);
+ 
++/* msg/ctcp/notice commands: func(hand, nick, uhost, args) */
+ typedef struct {
+ 	char *name;
+-	int  (*func) ();
++	int  (*func) (char *, char *, char *, char *);
+ 	int access;
+ 	char *help;
+ } cmd_t;
+ 
++/* dcc/botlink commands: func(idx, args) */
++typedef struct {
++	char *name;
++	int  (*func) (int, char *);
++	int access;
++	char *help;
++} dcc_cmd_t;
++
+ extern cmd_t C_msg[];
+-extern cmd_t C_dcc[];
++extern dcc_cmd_t C_dcc[];
+ int check_tcl_dcc (char *, char *, char *, int);
+ 
+ void tcl_command (char *, char *, char *, char *);
+diff -Naur ./source/banlist.c ../bitchx-1.2.1-patched/source/banlist.c
+--- ./source/banlist.c	2014-09-23 15:59:03.000000000 +0200
++++ ../bitchx-1.2.1-patched/source/banlist.c	2026-07-14 04:05:40.410481333 +0200
+@@ -302,7 +302,7 @@
+ 	BanList *bans;
+ 	WhowasList *whowas;
+ 	NickList *n = NULL;
+-	char *tmp, *channel, *ip_str, *host = NULL;
++	char *tmp, *channel, *ip_str = NULL, *host = NULL;
+ 	int count = 0, old_server = from_server;
+ 	
+ 	if (!stuff || !stuff->nick || !nick1 || !strcmp(stuff->user, "<UNKNOWN>") || my_stricmp(stuff->nick, nick1))
+@@ -369,7 +369,7 @@
+ 	ChannelList *c = NULL;
+ 	NickList *n = NULL;
+ 	WhowasList *whowas = NULL;
+-	char *channel, *nick, *user, *host, *b = "+b", *ob = "-o+b", *str = NULL;
++	char *channel, *nick = NULL, *user = NULL, *host = NULL, *b = "+b", *ob = "-o+b", *str = NULL;
+ 	int fuck, set_ignore, on_chan = 0;
+ 	
+ 	channel = next_arg(args, &args);
+@@ -989,7 +989,7 @@
+ 	NickList *nicks;
+ 	char *to, *tspec, *tnick, *rest, *spec = NULL;
+ 	int count = 0, kick_first = 0, set_ignore = 0, server;
+-	time_t time;
++	time_t time = 0;
+ 	
+ 	to = next_arg(args, &args);
+ 	if (to && !is_channel(to))
+diff -Naur ./source/bot_link.c ../bitchx-1.2.1-patched/source/bot_link.c
+--- ./source/bot_link.c	2014-09-24 16:28:19.000000000 +0200
++++ ../bitchx-1.2.1-patched/source/bot_link.c	2026-07-14 04:05:40.410698803 +0200
+@@ -42,9 +42,8 @@
+ 
+ int BX_get_max_fd();
+ 
+-extern cmd_t C_dcc[];
+ 
+-cmd_t C_tandbot[] =
++dcc_cmd_t C_tandbot[] =
+ {
+ 	{ "zapf",	tand_zapf,	 0,	NULL },
+ 	{ "zapf-broad", tand_zapfbroad,  0,	NULL },
+@@ -743,9 +742,9 @@
+ 		return TCL_ERROR;
+ 	if ((Tcl_Eval(tcl_interp, par)) == TCL_OK)
+ 	{
+-		dcc_printf(idx, "Tcl: %s\n", tcl_interp->result);
++        dcc_printf(idx, "Tcl: %s\n", Tcl_GetStringResult(tcl_interp));
+ 	} else 
+-		dcc_printf(idx, "Tcl Error: %s\n", tcl_interp->result);
++        dcc_printf(idx, "Tcl Error: %s\n", Tcl_GetStringResult(tcl_interp));
+ #else
+ 		dcc_printf(idx, "Not implemented in this client\n");
+ #endif
+diff -Naur ./source/cdcc.c ../bitchx-1.2.1-patched/source/cdcc.c
+--- ./source/cdcc.c	2014-03-01 00:52:33.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/cdcc.c	2026-07-14 04:05:40.410926899 +0200
+@@ -1177,9 +1177,14 @@
+ 		ptr->num = ++cdcc_numpacks;
+ 		malloc_strcpy(&ptr->file, buffer);
+ 
+-		fgets(buffer, BIG_BUFFER_SIZE, file);
++		if (!fgets(buffer, BIG_BUFFER_SIZE, file)) {
++			put_it("%s: not a cdcc pack aborting", cparse(get_string_var(CDCC_PROMPT_VAR)));
++			new_free(&ptr->file);
++			new_free((char **)&ptr);
++			fclose(file);
++			return 0;
++		}
+ 		chop(buffer, 1);
+-
+ 		temp = strrchr(buffer, ' ');
+ 		if (temp)
+ 			*temp++ = '\0';
+@@ -1195,15 +1200,19 @@
+ 		}
+ 		ptr->numfiles = atoi(temp);
+ 
+-		fgets(buffer, BIG_BUFFER_SIZE, file);
++		if (!fgets(buffer, BIG_BUFFER_SIZE, file)) {
++			put_it("%s: not a cdcc pack aborting", cparse(get_string_var(CDCC_PROMPT_VAR)));
++			new_free(&ptr->file);
++			new_free((char **)&ptr);
++			fclose(file);
++			return 0;
++		}
+ 		chop(buffer, 1);
+ 		if (*buffer)
+ 			malloc_strcpy(&ptr->notes, buffer);
+ 	
+ 
+-		fgets(buffer, BIG_BUFFER_SIZE, file);
+-		chop(buffer, 1);
+-
++		p = new_next_arg(buffer, &p);
+ 		if ((q = next_arg(p, &p)))
+ 			ptr->gets = my_atol(q);
+ 		if ((q = next_arg(p, &p)))
+@@ -1242,10 +1251,6 @@
+ 
+ 	return 0;
+ } 
+-	
+-	
+- 
+-/* --- Misc functions --- */
+ 
+ /* add file/files to a pack */
+ static void add_files(char *args, char *rest)
+diff -Naur ./source/commands.c ../bitchx-1.2.1-patched/source/commands.c
+--- ./source/commands.c	2014-11-04 11:54:23.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/commands.c	2026-07-14 04:05:40.411396413 +0200
+@@ -957,15 +957,9 @@
+ 	
+ 	if (com && (len = strlen(com)) && dll_commands)
+ 	{
+-		int	min,
+-			max;
+ 		IrcCommandDll *old, *old_next = NULL;
+ 		
+ 		*cnt = 0;
+-		min = 1;
+-		max = 0;
+-		for (old = dll_commands; old; old = old->next)
+-			max++;
+ 		
+ 		old = dll_commands;
+ 		while (1)
+@@ -1608,11 +1602,12 @@
+     }
+ 
+     /* Write the footer */
+-    if (fget_string_var(FORMAT_NAMES_FOOTER_FSET))
++    if (fget_string_var(FORMAT_NAMES_FOOTER_FSET)) {
+         put_it("%s", 
+             convert_output_format(fget_string_var(FORMAT_NAMES_FOOTER_FSET), 
+                 "%s %s %d %d %s", update_clock(GET_TIME), chan->channel, 
+                 n_inscan, n_total, match_host ? match_host : empty_string));
++    }
+ 
+ 	clear_sorted_nicklist(&snick);
+ }
+@@ -3146,7 +3141,7 @@
+ 				hours, minutes, seconds,
+ 				on_off(get_int_var(MSGLOG_VAR)));
+ 			{
+-				char str[BIG_BUFFER_SIZE+1];
++				char str[BIG_BUFFER_SIZE + 32];
+ 				char reason[BIG_BUFFER_SIZE+1];
+ 				char fset[BIG_BUFFER_SIZE+1];
+ 				*reason = 0;
+@@ -3156,7 +3151,7 @@
+ 					quote_it(stripansicodes(convert_output_format(fget_string_var(FORMAT_BACK_FSET), "%s %d %d %d %d %s",
+ 																  update_clock(GET_TIME),	hours, minutes, seconds,
+ 																  get_int_var(MSGCOUNT_VAR), reason)), NULL, fset);
+-					snprintf(str, BIG_BUFFER_SIZE,
++					snprintf(str, sizeof(str),
+ 							 "PRIVMSG %%s :ACTION %s", fset);
+ 					send_msg_to_channels(get_server_channels(from_server), from_server, str);
+ 				}
+@@ -4698,8 +4693,8 @@
+ 						err = Tcl_Invoke(tcl_interp, cline, rest);
+ 						if (err == TCL_OK)
+ 						{
+-							if (tcl_interp->result && *tcl_interp->result)
+-								bitchsay("%s %s", *tcl_interp->result?empty_string:unknown, *tcl_interp->result?tcl_interp->result:empty_string);
++							if (Tcl_GetStringResult(tcl_interp) && *Tcl_GetStringResult(tcl_interp))
++								bitchsay("%s %s", *Tcl_GetStringResult(tcl_interp)?empty_string:unknown, *Tcl_GetStringResult(tcl_interp)?Tcl_GetStringResult(tcl_interp):empty_string);
+ 						}
+ 						else
+ 						{
+@@ -4707,10 +4702,10 @@
+ 								bitchsay("Ambiguous command: %s", cline);
+ 							else if (get_int_var(DISPATCH_UNKNOWN_COMMANDS_VAR))
+ 								send_to_server("%s %s", cline, rest);
+-							else if (tcl_interp->result && *tcl_interp->result)
++							else if (Tcl_GetStringResult(tcl_interp) && *Tcl_GetStringResult(tcl_interp))
+ 							{
+ 								if (check_help_bind(cline))
+-									bitchsay("%s", tcl_interp->result);
++									bitchsay("%s", Tcl_GetStringResult(tcl_interp));
+ 							}
+ 							else
+ 								bitchsay("%s %s", unknown, cline);
+@@ -4870,7 +4865,7 @@
+ 		{
+ #ifdef WANT_TCL
+ 			if (Tcl_EvalFile(tcl_interp, filename) != TCL_OK)
+-				error("Unable to load filename %s[%s]", filename, tcl_interp->result);
++				error("Unable to load filename %s[%s]", filename, Tcl_GetStringResult(tcl_interp));
+ #endif
+ 			continue;
+ 		}
+@@ -5560,9 +5555,9 @@
+ 		if (get_string_var(LOAD_PATH_VAR))
+ 			bla = path_search(filename, get_string_var(LOAD_PATH_VAR));
+ 		if ((result = Tcl_EvalFile(tcl_interp, bla?bla:filename)) != TCL_OK)
+-			put_it("Tcl:  [%s]",tcl_interp->result);
+-		else if (*tcl_interp->result)
+-			put_it("Tcl:  [%s]", tcl_interp->result);
++			put_it("Tcl:  [%s]",Tcl_GetStringResult(tcl_interp));
++		else if (*Tcl_GetStringResult(tcl_interp))
++			put_it("Tcl:  [%s]", Tcl_GetStringResult(tcl_interp));
+ 	}
+ }
+ 
+diff -Naur ./source/commands2.c ../bitchx-1.2.1-patched/source/commands2.c
+--- ./source/commands2.c	2013-11-15 14:57:46.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/commands2.c	2026-07-14 04:05:40.411982862 +0200
+@@ -2541,7 +2541,7 @@
+ {
+ 	if (reattach_socket != -1)
+ 	{
+-		my_signal(SIGPIPE, SIG_IGN, 0);
++		my_signal(SIGPIPE, (sigfunc *)SIG_IGN, 0);
+ 		new_close(0); 
+ 		kill(save_pid, type? SIGPIPE : SIGHUP);
+ 		new_close(reattach_socket);
+diff -Naur ./source/dcc.c ../bitchx-1.2.1-patched/source/dcc.c
+--- ./source/dcc.c	2014-03-02 20:59:13.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/dcc.c	2026-07-14 04:05:40.412394530 +0200
+@@ -79,11 +79,11 @@
+ 	char	*name;
+ 	char	*module;
+ 	int	type;
+-	int 	(*init_func)();
+-	int	(*open_func)();
+-	int	(*input)();
+-	int	(*output)();
+-	int	(*close_func)();
++	int 	(*init_func)(char *, char *, char *, char *, char *, char *, unsigned long, unsigned int);
++	int	(*open_func)(int, int, unsigned long, int);
++	int	(*input)(int, int, char *, int, int);
++	int	(*output)(int, int, char *, int);
++	int	(*close_func)(int, unsigned long, int);
+ 	
+ } _dcc_types[] =
+ {
+diff -Naur ./source/exec.c ../bitchx-1.2.1-patched/source/exec.c
+--- ./source/exec.c	2013-07-15 08:19:02.000000000 +0200
++++ ../bitchx-1.2.1-patched/source/exec.c	2026-07-14 04:05:40.412749128 +0200
+@@ -571,10 +571,10 @@
+ #endif			
+ 			setuid(getuid());
+ 			setgid(getgid());
+-			my_signal(SIGINT, SIG_IGN, 0);
+-			my_signal(SIGQUIT, SIG_DFL, 0);
+-			my_signal(SIGSEGV, SIG_DFL, 0);
+-			my_signal(SIGBUS, SIG_DFL, 0);
++			my_signal(SIGINT, (sigfunc *)SIG_IGN, 0);
++			my_signal(SIGQUIT, (sigfunc *)SIG_DFL, 0);
++			my_signal(SIGSEGV, (sigfunc *)SIG_DFL, 0);
++			my_signal(SIGBUS, (sigfunc *)SIG_DFL, 0);
+ #endif
+ 
+ 			dup2(p0[0], 0);
+diff -Naur ./source/expr2.c ../bitchx-1.2.1-patched/source/expr2.c
+--- ./source/expr2.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/expr2.c	2026-07-14 04:05:40.412978914 +0200
+@@ -1040,9 +1040,9 @@
+ 		case OREQ:	IMPLIED(a | b)
+ 		case SHLEFTEQ:	IMPLIED(a << b)
+ 		case SHRIGHTEQ: IMPLIED(a >> b)
+-		case DANDEQ:	IMPLIED((long)(c && d))
+-		case DOREQ:	IMPLIED((long)(c || d))
+-		case DXOREQ:	IMPLIED((long)((c && !d) || (!c && d)))
++		case DANDEQ:	IMPLIED(((a != 0) && (b != 0)))
++		case DOREQ:	IMPLIED(((a != 0) || (b != 0)))
++		case DXOREQ:	IMPLIED(((a != 0) ^ (b != 0)))
+ 		case STRCATEQ:
+ 			pop2s_a(cx, &s, &t, &v);
+ 			if (x_debug & DEBUG_NEW_MATH_DEBUG) 
+@@ -1192,7 +1192,7 @@
+  * case 'operand' is set to 1.  When an operand is lexed, then the next token
+  * is expected to be a binary operator, so 'operand' is set to 0. 
+  */
+-__inline int	check_implied_arg (expr_info *c)
++static __inline int	check_implied_arg (expr_info *c)
+ {
+ 	if (c->operand == 2)
+ 	{
+@@ -1205,7 +1205,7 @@
+ 	return c->operand;
+ }
+ 
+-__inline TOKEN 	operator (expr_info *c, char *x, int y, TOKEN z)
++static __inline TOKEN 	operator (expr_info *c, char *x, int y, TOKEN z)
+ {
+ 	check_implied_arg(c);
+ 	if (c->operand)
+@@ -1216,7 +1216,7 @@
+ 	return z;
+ }
+ 
+-__inline TOKEN 	unary (expr_info *c, char *x, int y, TOKEN z)
++static __inline TOKEN 	unary (expr_info *c, char *x, int y, TOKEN z)
+ {
+ 	if (!c->operand)
+ 		return lexerr(c, "An operator (%s) was found where "
+diff -Naur ./source/glob.c ../bitchx-1.2.1-patched/source/glob.c
+--- ./source/glob.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/glob.c	2026-07-14 04:05:40.413189515 +0200
+@@ -590,7 +590,7 @@
+ 	 * and dirent.h as taking pointers to differently typed opaque
+ 	 * structures.
+ 	 */
+-	struct dirent *(*readdirfunc)();
++	struct dirent *(*readdirfunc)(void *);
+ 
+ 	*pathend = EOS;
+ 	errno = 0;
+@@ -612,9 +612,9 @@
+ 
+ 	/* Search directory for matching names. */
+ 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
+-		readdirfunc = pglob->gl_readdir;
++		readdirfunc = (struct dirent *(*)(void *))pglob->gl_readdir;
+ 	else
+-		readdirfunc = readdir;
++		readdirfunc = (struct dirent *(*)(void *))readdir;
+ 
+ 
+ 	if (pglob->gl_flags & GLOB_INSENSITIVE)
+diff -Naur ./source/irc.c ../bitchx-1.2.1-patched/source/irc.c
+--- ./source/irc.c	2014-11-14 11:42:09.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/irc.c	2026-07-14 04:05:40.413384800 +0200
+@@ -382,7 +382,7 @@
+ {
+ 	dead_children_processes++;
+ #ifdef __EMX__
+-	my_signal(SIGCHLD, SIG_IGN, 0);
++	my_signal(SIGCHLD, (sigfunc *)SIG_IGN, 0);
+ #endif
+ }
+ 
+@@ -1548,20 +1548,20 @@
+ 	my_signal(SIGSEGV, coredump, 0);
+ 	my_signal(SIGBUS, coredump, 0);
+ #endif
+-	my_signal(SIGQUIT, SIG_IGN, 0);
++	my_signal(SIGQUIT, (sigfunc *)SIG_IGN, 0);
+ #ifdef WANT_DETACH
+ 	set_detach_on_hup(NULL, NULL, DEFAULT_DETACH_ON_HUP);
+ #else
+ 	my_signal(SIGHUP, irc_exit_old, 0);
+ #endif
+ 	my_signal(SIGTERM, irc_exit_old, 0);
+-	my_signal(SIGPIPE, SIG_IGN, 0);
++	my_signal(SIGPIPE, (sigfunc *)SIG_IGN, 0);
+ 	my_signal(SIGINT, cntl_c, 0);
+ 	my_signal(SIGCHLD, child_reap, 0);
+ 	my_signal(SIGALRM, nothing, 0);
+ 	my_signal(SIGUSR1, sig_user1, 0);
+ #ifdef GTK
+-	my_signal(SIGTTOU, SIG_IGN, 0);
++	my_signal(SIGTTOU, (sigfunc *)SIG_IGN, 0);
+ #endif
+ #if 0
+ 	my_signal(SIGUSR1, sigusr2, 0);
+@@ -1592,7 +1592,7 @@
+ 	{
+ 		if (background)
+ 		{
+-			my_signal(SIGHUP, SIG_IGN, 0);
++			my_signal(SIGHUP, (sigfunc *)SIG_IGN, 0);
+ 			background = 0;
+ #ifndef WANT_DETACH
+ 			term_reset();
+diff -Naur ./source/ircaux.c ../bitchx-1.2.1-patched/source/ircaux.c
+--- ./source/ircaux.c	2013-11-07 04:00:24.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/ircaux.c	2026-07-14 04:05:40.413648835 +0200
+@@ -1994,7 +1994,6 @@
+ }
+ 
+ 
+-double strtod();
+ extern int BX_check_val (char *sub)
+ {
+ 	long sval;
+@@ -2817,8 +2816,6 @@
+ 	return save;
+ }
+ 
+-char *crypt();
+-
+ char *BX_cryptit(const char *string) 
+ {
+ static char saltChars[] = 
+diff -Naur ./source/ircsig.c ../bitchx-1.2.1-patched/source/ircsig.c
+--- ./source/ircsig.c	2008-02-25 10:49:14.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/ircsig.c	2026-07-14 04:05:40.413890332 +0200
+@@ -24,7 +24,7 @@
+ 	if (sig_no < 0)
+ 		return NULL;
+ 
+-	sa.sa_handler = sig_handler;
++	sa.sa_handler = (__sighandler_t)sig_handler;
+ 
+ 	sigemptyset(&sa.sa_mask);
+ 	sigaddset(&sa.sa_mask, sig_no);
+diff -Naur ./source/misc.c ../bitchx-1.2.1-patched/source/misc.c
+--- ./source/misc.c	2014-10-21 14:21:24.000000000 +0200
++++ ../bitchx-1.2.1-patched/source/misc.c	2026-07-14 04:05:40.414167932 +0200
+@@ -172,19 +172,19 @@
+ 	put_it("%s",convert_output_format("%G| %cTotal Users on Shitlist: %K[%R$0%K]","%d",shit_count));
+ 
+ #else
+-	put_it("%s",convert_output_format("%GÚÄ[ %WBitchX%gÄ%wClient%gÄ%RStatistics %G]ÄÄÄÄ---%gÄ--ÄÄ%K-%gÄÄÄÄÄ--%GÄ--ÄÄ%K-%gÄÄÄÄÄÄÄ--- %K--%g  -",NULL));
++	put_it("%s",convert_output_format("%GÃ?Ã?[ %WBitchX%gÃ?%wClient%gÃ?%RStatistics %G]Ã?Ã?Ã?Ã?---%gÃ?--Ã?Ã?%K-%gÃ?Ã?Ã?Ã?Ã?--%GÃ?--Ã?Ã?%K-%gÃ?Ã?Ã?Ã?Ã?Ã?Ã?--- %K--%g  -",NULL));
+ 	put_it("%s",convert_output_format("%G| %CClient Version: %W$0 $1","%s %s", irc_version, internal_version));
+-	put_it("%s",convert_output_format("%G³ %CClient Running Since %W$0-","%s",my_ctime(start_time)));
++	put_it("%s",convert_output_format("%GÂ³ %CClient Running Since %W$0-","%s",my_ctime(start_time)));
+ 	put_it("%s",convert_output_format("%G| %CClient Uptime: %W$0-","%s",convert_time(now-start_time)));
+-	put_it("%s",convert_output_format("%G³ %CCurrent UserName: %W$0-","%s", username));
++	put_it("%s",convert_output_format("%GÂ³ %CCurrent UserName: %W$0-","%s", username));
+ 	put_it("%s",convert_output_format("%G: %CCurrent RealName: %W$0-","%s", realname));
+ 	put_it("%s",convert_output_format("%G. %CLast Recv Message: %W$0-","%s",last_msg[0].last_msg?last_msg[0].last_msg:"None"));
+ 	put_it("%s",convert_output_format("%G: %CLast Recv Notice: %W$0-","%s",last_notice[0].last_msg?last_notice[0].last_msg:"None"));
+ 	put_it("%s",convert_output_format("%G. %CLast Sent Msg: %W$0-","%s",last_sent_msg[0].last_msg?last_sent_msg[0].last_msg:"None"));
+ 	put_it("%s",convert_output_format("%G: %CLast Sent Notice: %W$0-","%s",last_sent_notice[0].last_msg?last_sent_notice[0].last_msg:"None"));
+-	put_it("%s",convert_output_format("%G³ %CLast Channel invited to: %R$0-","%s",invite_channel?invite_channel:"None"));
++	put_it("%s",convert_output_format("%GÂ³ %CLast Channel invited to: %R$0-","%s",invite_channel?invite_channel:"None"));
+ 	put_it("%s",convert_output_format("%G| %cTotal Users on Userlist: %K[%R$0%K]","%d",user_count));
+-	put_it("%s",convert_output_format("%G³ %cTotal Users on Shitlist: %K[%R$0%K]","%d",shit_count));
++	put_it("%s",convert_output_format("%GÂ³ %cTotal Users on Shitlist: %K[%R$0%K]","%d",shit_count));
+ 
+ #endif
+ }
+@@ -2028,8 +2028,8 @@
+ static	struct	reslist	*ar_last = NULL, *ar_first = NULL;
+ 
+ 
+-static	int	do_query_name(struct resinfo *, char *, register struct reslist *, char *, char *, char *, char *, int , void (*func)(), char *);
+-static	int	do_query_number(struct resinfo *, char *, register struct reslist *, char *, char *, char *, char *, int , void (*func)(), char *);
++static	int	do_query_name(struct resinfo *, char *, register struct reslist *, char *, char *, char *, char *, int , void (*func)(struct reslist *), char *);
++static	int	do_query_number(struct resinfo *, char *, register struct reslist *, char *, char *, char *, char *, int , void (*func)(struct reslist *), char *);
+ static	int	ar_resend_query(struct reslist *);
+ 
+ #define MAX_RETRIES 4
+@@ -2288,7 +2288,7 @@
+  * current list awaiting replies.  Initialization of the record with set
+  * values should also be done.
+  */
+-static	struct	reslist	*ar_make_request(register struct resinfo *resi, char *nick, char *user, char *h, char *chan, int server, void (*func)(), char *command)
++static	struct	reslist	*ar_make_request(register struct resinfo *resi, char *nick, char *user, char *h, char *chan, int server, void (*func)(struct reslist *), char *command)
+ {
+ 	register struct	reslist	*rptr;
+ 	register struct resinfo *rp;
+@@ -2515,7 +2515,7 @@
+  * doesn't return the record being looked up but just places the query in the
+  * queue to await answers.
+  */
+-int	ar_gethostbyname(char *name, char *info, int size, char *nick, char *user, char *h, char *chan, int server, void (*func)(), char *command)
++int	ar_gethostbyname(char *name, char *info, int size, char *nick, char *user, char *h, char *chan, int server, void (*func)(struct reslist *), char *command)
+ {
+ 	char	host[HOSTLEN+1];
+ 	struct	resinfo	resi;
+@@ -2537,7 +2537,7 @@
+ 	return (do_query_name(rp, host, NULL, nick, user, h, chan, server, func, command));
+ }
+ 
+-static	int	do_query_name(struct resinfo *resi, char *name, register struct reslist *rptr, char *nick, char *user, char *h, char *chan, int server, void (*func)(), char *command)
++static	int	do_query_name(struct resinfo *resi, char *name, register struct reslist *rptr, char *nick, char *user, char *h, char *chan, int server, void (*func)(struct reslist *), char *command)
+ {
+ 	char	hname[HOSTLEN];
+ 	int	len;
+@@ -2580,7 +2580,7 @@
+  *
+  * Generates a query for a given IP address.
+  */
+-int	ar_gethostbyaddr(char *addr, char *info, int size, char *nick, char *user, char *h, char *chan, int server, void (*func)(), char *command)
++int	ar_gethostbyaddr(char *addr, char *info, int size, char *nick, char *user, char *h, char *chan, int server, void (*func)(struct reslist *), char *command)
+ {
+ 	struct	resinfo	resi;
+ 	register struct resinfo *rp = &resi;
+@@ -2603,7 +2603,7 @@
+  *
+  * Use this to do reverse IP# lookups.
+  */
+-static	int	do_query_number(struct resinfo *resi, char *numb, register struct reslist *rptr, char *nick, char *user, char *h, char *chan, int server, void (*func)(), char *command)
++static	int	do_query_number(struct resinfo *resi, char *numb, register struct reslist *rptr, char *nick, char *user, char *h, char *chan, int server, void (*func)(struct reslist *), char *command)
+ {
+ 	register unsigned char	*cp;
+ 	static	char	ipbuf[32];
+@@ -3051,7 +3051,7 @@
+ 	return -1;
+ }
+ 
+-char *do_nslookup(char *host, char *nick, char *user, char *chan, int server, void (*func)(), char *command)
++char *do_nslookup(char *host, char *nick, char *user, char *chan, int server, void (*func)(struct reslist *), char *command)
+ {
+ #ifdef WANT_NSLOOKUP
+ #ifdef THREAD
+diff -Naur ./source/modules.c ../bitchx-1.2.1-patched/source/modules.c
+--- ./source/modules.c	2010-06-26 10:18:34.000000000 +0200
++++ ../bitchx-1.2.1-patched/source/modules.c	2026-07-14 04:05:40.414596045 +0200
+@@ -74,7 +74,6 @@
+ Packages *install_pack = NULL;
+ #endif /* WANT_DLL */
+ 
+-extern int BX_read_sockets();
+ extern int identd;
+ extern int doing_notice;
+ 
+@@ -83,7 +82,7 @@
+ extern int (*dcc_input_func)  (int, int, char *, int, int);
+ extern int (*dcc_close_func) (int, unsigned long, int);
+ 
+-int (*serv_open_func) (int, unsigned long, int);
++extern int (*serv_open_func) (int, unsigned long, int);
+ extern int (*serv_output_func) (int, int, char *, int);
+ extern int (*serv_input_func)  (int, char *, int, int, int);
+ extern int (*serv_close_func) (int, unsigned long, int);
+diff -Naur ./source/numbers.c ../bitchx-1.2.1-patched/source/numbers.c
+--- ./source/numbers.c	2014-11-14 11:34:50.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/numbers.c	2026-07-14 04:05:40.414819299 +0200
+@@ -66,7 +66,7 @@
+ int	stats_k_grep		(char **);
+ void	who_handlekill		(char *, char *, char *);
+ void	handle_tracekill	(int, char *, char *, char *);
+-int	no_hook_notify;
++extern	int	no_hook_notify;
+ extern  AJoinList *ajoin_list;
+ void	remove_from_server_list (int);
+ 
+diff -Naur ./source/screen.c ../bitchx-1.2.1-patched/source/screen.c
+--- ./source/screen.c	2013-11-18 13:38:07.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/screen.c	2026-07-14 04:05:40.415103410 +0200
+@@ -1642,10 +1642,10 @@
+ 			 * Try to restore some sanity to the signal
+ 			 * handlers, since theyre not really appropriate here
+ 			 */
+-			my_signal(SIGINT,  SIG_IGN, 0);
+-			my_signal(SIGSEGV, SIG_DFL, 0);
+-			my_signal(SIGBUS,  SIG_DFL, 0);
+-			my_signal(SIGABRT, SIG_DFL, 0);
++			my_signal(SIGINT,  (sigfunc *)SIG_IGN, 0);
++			my_signal(SIGSEGV, (sigfunc *)SIG_DFL, 0);
++			my_signal(SIGBUS,  (sigfunc *)SIG_DFL, 0);
++			my_signal(SIGABRT, (sigfunc *)SIG_DFL, 0);
+ 
+ 			if (screen_type == ST_SCREEN)
+ 			{
+diff -Naur ./source/tcl.c ../bitchx-1.2.1-patched/source/tcl.c
+--- ./source/tcl.c	2013-11-11 22:28:31.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/tcl.c	2026-07-14 04:05:40.415400639 +0200
+@@ -125,7 +125,8 @@
+ IrcVariable 		*fget_var_address(char *);
+ void 			add_tcl_fset(Tcl_Interp *);
+ 
+-extern			cmd_t C_msg[], C_ctcp[], C_notice[], C_dcc[];
++extern			cmd_t C_msg[], C_ctcp[], C_notice[];
++extern			dcc_cmd_t C_dcc[];
+ 
+ 
+ int in_add_to_tcl = 0;
+@@ -764,7 +765,7 @@
+ ChannelList *tcl_channel_add(Tcl_Interp *irp, char *chan, char *options)
+ {
+ ChannelList *tmp = NULL;
+-int argc = 0; char **argv = NULL;
++	int argc = 0; const char **argv = NULL;
+ 
+ 	
+ 	if (Tcl_SplitList(irp, options, &argc, &argv) != TCL_OK)
+@@ -773,7 +774,7 @@
+ 	if (!(tmp = lookup_channel(chan, from_server, CHAN_NOUNLINK)))
+ 		tmp = add_channel(chan, from_server, 0);
+ 	if (tmp)
+-		tcl_channel_modify(irp, chan, tmp, argc, argv);
++		tcl_channel_modify(irp, chan, tmp, argc, (char **)argv);
+ 	return tmp ? tmp : NULL;
+ }
+ 
+@@ -1386,13 +1387,13 @@
+ 	if (Tcl_VarEval(tcl_interp,proc,param,NULL)==TCL_ERROR) 
+ 	{
+ 		if (internal_debug & DEBUG_TCL)
+-			debugyell("Tcl return from [%s] with [%s]", proc, tcl_interp->result);
+-		putlog(LOG_ALL,"*","Tcl error [%s]: %s",proc,tcl_interp->result);
++			debugyell("Tcl return from [%s] with [%s]", proc, Tcl_GetStringResult(tcl_interp));
++		putlog(LOG_ALL,"*","Tcl error [%s]: %s",proc,Tcl_GetStringResult(tcl_interp));
+ 		return BIND_EXECUTED;
+ 	}
+ 	if (internal_debug & DEBUG_TCL)
+-		debugyell("Tcl return from [%s] with [%s]", proc, tcl_interp->result);
+-	return (atoi(tcl_interp->result)>0)?BIND_EXEC_LOG:BIND_EXECUTED;
++		debugyell("Tcl return from [%s] with [%s]", proc, Tcl_GetStringResult(tcl_interp));
++	return (atoi(Tcl_GetStringResult(tcl_interp))>0)?BIND_EXEC_LOG:BIND_EXECUTED;
+ }
+ 
+ void init_builtins()
+@@ -1401,7 +1402,7 @@
+ Tcl_HashTable *ht=NULL; 
+ Tcl_HashEntry *he;
+ tcl_cmd_t *tt; 
+-cmd_t *cc=NULL;
++void *cc=NULL;
+ 
+ 
+ 	
+@@ -1410,22 +1411,22 @@
+ 		switch(j)
+ 		{
+ 			case 0:
+-				ht = &H_msg; cc = C_msg; break;
++				ht = &H_msg; cc = (void *)C_msg; break;
+ 			case 1:
+-				ht = &H_dcc; cc = C_dcc; break;
++				ht = &H_dcc; cc = (void *)C_dcc; break;
+ 			case 2:
+-				ht = &H_ctcp; cc = C_ctcp; break;
++				ht = &H_ctcp; cc = (void *)C_ctcp; break;
+ 			case 3:
+-				ht = &H_notice; cc = C_notice; break;
++				ht = &H_notice; cc = (void *)C_notice; break;
+ 		}
+ 		i = 0;
+-		while (cc[i].access != -1) 
++		while (((cmd_t*)cc)[i].access != -1) 
+ 		{
+ 			tt = (tcl_cmd_t *) new_malloc(sizeof(tcl_cmd_t));
+-			tt->func_name = m_sprintf("*%s", cc[i].name);  
+-			tt->flags_needed=cc[i].access; 
++			tt->func_name = m_sprintf("*%s", ((cmd_t*)cc)[i].name);  
++			tt->flags_needed=((cmd_t*)cc)[i].access; 
+ 			tt->next=NULL;
+-			he=Tcl_CreateHashEntry(ht,cc[i].name,&new);
++			he=Tcl_CreateHashEntry(ht,((cmd_t*)cc)[i].name,&new);
+ 			if (!new) 
+ 			{
+ 				/* append old entry */
+@@ -1451,8 +1452,8 @@
+ }
+ 
+ /* check a tcl binding and execute the procs necessary */
+-int check_tcl_bind(Tcl_HashTable *hash, char *mat, int atr, char *param, 
+-		int match_type, cmd_t *builtin)
++int check_tcl_bind(Tcl_HashTable *hash, char *mat, int atr, char *param,
++		int match_type, void *builtin)
+ {
+ Tcl_HashSearch srch; 
+ Tcl_HashEntry *he; 
+@@ -1540,13 +1541,13 @@
+ 		
+ 		strcpy(pr,&proc[1]); 
+ 		f=0;
+-		while (builtin[bot].access!=(-1)) bot++;  /* find bottom */
++		while (((cmd_t*)builtin)[bot].access!=(-1)) bot++;  /* find bottom */
+ 		
+ 		/* binary search: */
+ 		while (!f) 
+ 		{
+ 			try=(top+bot)/2; 
+-			xx=my_stricmp(builtin[try].name,pr);
++			xx=my_stricmp(((cmd_t*)builtin)[try].name,pr);
+ 			if (xx==0) f=1;
+ 			if (xx<0) top=try+1;
+ 			if (xx>0) bot=try;
+@@ -1956,7 +1957,7 @@
+ 	
+ 	Tcl_SetVar(tcl_interp, "_a", args?args:empty_string, TCL_GLOBAL_ONLY);
+ 	if (check_tcl_bind(&H_functions, command, -1, " $_a", MATCH_MASK|BIND_STACKABLE, NULL))
+-		return m_strdup(tcl_interp->result?tcl_interp->result:empty_string);
++		return m_strdup(Tcl_GetStringResult(tcl_interp)?Tcl_GetStringResult(tcl_interp):empty_string);
+ 	return NULL;
+ }
+ 
+@@ -2341,9 +2342,9 @@
+ 				if (get_string_var(LOAD_PATH_VAR))
+ 					bla = path_search(args, get_string_var(LOAD_PATH_VAR));
+ 				if ((result = Tcl_EvalFile(tcl_interp, bla ? bla : args)) != TCL_OK)
+-					put_it("Tcl:  [%s]",tcl_interp->result);
+-				else if (tcl_echo && *tcl_interp->result)
+-					put_it("Tcl:  [%s]", tcl_interp->result);
++					put_it("Tcl:  [%s]",Tcl_GetStringResult(tcl_interp));
++				else if (tcl_echo && *Tcl_GetStringResult(tcl_interp))
++					put_it("Tcl:  [%s]", Tcl_GetStringResult(tcl_interp));
+ 			} 
+ 			else if (!my_strnicmp(args+1, "xecho", 4)) 
+ 			{
+@@ -2357,9 +2358,9 @@
+ 			return;					
+ 		}
+ 		if ((result = Tcl_Eval(tcl_interp, args)) != TCL_OK)
+-			put_it("Tcl: %s %s", args, tcl_interp->result);
+-		else if (tcl_echo && *tcl_interp->result)
+-			put_it("Tcl: [%s] %s", args, tcl_interp->result);
++			put_it("Tcl: %s %s", args, Tcl_GetStringResult(tcl_interp));
++		else if (tcl_echo && *Tcl_GetStringResult(tcl_interp))
++			put_it("Tcl: [%s] %s", args, Tcl_GetStringResult(tcl_interp));
+ 	} 
+ 	else
+ 	{
+@@ -2397,7 +2398,7 @@
+ 		debugyell("Invoking tcl [%s] with [%s]", com, rest);
+ 	if (Tcl_GetCommandInfo(irp, com, &info) && info.proc)
+ 	{
+-		result = (*info.proc)(info.clientData, irp, argc, ArgList);
++		result = (*info.proc)((ClientData)info.clientData, irp, argc, (const char **)ArgList);
+ 		if (internal_debug & DEBUG_TCL)
+ 			debugyell("Tcl returning with [%d]", result);
+ 	}
+diff -Naur ./source/tcl_public.c ../bitchx-1.2.1-patched/source/tcl_public.c
+--- ./source/tcl_public.c	2013-11-11 22:28:48.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/tcl_public.c	2026-07-14 04:05:40.415708227 +0200
+@@ -1,4 +1,3 @@
+-
+ #include "irc.h"
+ static char cvsrevision[] = "$Id: tcl_public.c 454 2013-11-11 21:28:48Z tcava $";
+ CVS_REVISION(tcl_public_c)
+@@ -17,7 +16,7 @@
+ #define MAIN_SOURCE
+ #include "modval.h"
+ 
+-cmd_t C_dcc[] =
++dcc_cmd_t C_dcc[] =
+ {
+ 	{ "act",	cmd_act,	 ADD_DCC, "Perform action on a channel"},
+ 	{ "adduser",	cmd_adduser,	 ADD_DCC, "add a user to the userlist" },
+@@ -234,16 +233,16 @@
+     int   fieldNameSize, elementSize;
+ 
+     if (field [0] == '\0') {
+-        tcl_interp->result =
+-            "invalid keyed list format: list contains an empty field entry";
++        Tcl_SetResult(tcl_interp,
++            "invalid keyed list format: list contains an empty field entry", TCL_VOLATILE);
+         return TCL_ERROR;
+     }
+     if (TclFindElement (tcl_interp, (char *) field, &elementPtr, &nextPtr, 
+                         &elementSize, NULL) != TCL_OK)
+         return TCL_ERROR;
+     if (elementSize == 0) {
+-        tcl_interp->result =
+-            "invalid keyed list format: list contains an empty field name";
++        Tcl_SetResult(tcl_interp,
++            "invalid keyed list format: list contains an empty field name", TCL_VOLATILE);
+         return TCL_ERROR;
+     }
+     if (nextPtr[0] == '\0') {
+@@ -310,14 +309,14 @@
+     int  idx, result, braced;
+ 
+     if (fieldName == '\0') {
+-        tcl_interp->result = "null key not allowed";
++        Tcl_SetResult(tcl_interp, "null key not allowed", TCL_VOLATILE);
+         return TCL_ERROR;
+     }
+ 
+     fieldInfoPtr->argv = NULL;
+ 
+     if (Tcl_SplitList (tcl_interp, (char *) keyedList, &fieldInfoPtr->argc,
+-                       &fieldInfoPtr->argv) != TCL_OK)
++                        (const char ***)&fieldInfoPtr->argv) != TCL_OK)
+         goto errorExit;
+ 
+     result = TCL_BREAK;
+@@ -505,7 +504,7 @@
+ 
+ 	if (fieldName == '\0') 
+ 	{
+-		tcl_interp->result = "null key not allowed";
++		Tcl_SetResult(tcl_interp, "null key not allowed", TCL_VOLATILE);
+ 		return TCL_ERROR;
+ 	}
+ 
+@@ -659,11 +658,11 @@
+             fieldInfo.valuePtr [fieldInfo.valueSize] = saveChar;
+         if (elemArgv [1] == NULL)
+             goto errorExit;
+-        newField = Tcl_Merge (2, elemArgv);
++        newField = Tcl_Merge (2, (const char **)elemArgv);
+         ckfree (elemArgv [1]);
+     } else {
+         elemArgv [1] = (char *) fieldValue;
+-        newField = Tcl_Merge (2, elemArgv);
++        newField = Tcl_Merge (2, (const char **)elemArgv);
+     }
+ 
+     /*
+@@ -676,7 +675,7 @@
+     }
+ 
+     fieldInfo.argv [fieldInfo.foundIdx] = newField;
+-    newList = Tcl_Merge (fieldInfo.argc, fieldInfo.argv);
++    newList = Tcl_Merge (fieldInfo.argc, (const char **)fieldInfo.argv);
+ 
+     if (nameSeparPtr != NULL)
+          *nameSeparPtr = '.';
+@@ -758,7 +757,7 @@
+         if (elemArgv [1][0] == '\0')
+             newElement = NULL;
+         else
+-            newElement = Tcl_Merge (2, elemArgv);
++            newElement = Tcl_Merge (2, (const char **)elemArgv);
+         ckfree (elemArgv [1]);
+     } else
+         newElement = NULL;
+@@ -770,7 +769,7 @@
+     } else
+         fieldInfo.argv [fieldInfo.foundIdx] = newElement;
+ 
+-    newList = Tcl_Merge (fieldInfo.argc, fieldInfo.argv);
++    newList = Tcl_Merge (fieldInfo.argc, (const char **)fieldInfo.argv);
+ 
+     if (nameSeparPtr != NULL)
+          *nameSeparPtr = '.';
+@@ -862,7 +861,7 @@
+      * Handle retrieving a value for a specified key.
+      */
+     if (argv [2] == '\0') {
+-        tcl_interp->result = "null key not allowed";
++        Tcl_SetResult(tcl_interp, "null key not allowed", TCL_VOLATILE);
+         return TCL_ERROR;
+     }
+     if ((argc == 4) && (argv [3][0] == '\0'))
+@@ -884,7 +883,7 @@
+                               "\" not found in keyed list", (char *) NULL);
+             return TCL_ERROR;
+         } else {
+-            tcl_interp->result = zero;
++            Tcl_SetResult(tcl_interp, zero, TCL_VOLATILE);
+             return TCL_OK;
+         }
+     }
+@@ -901,7 +900,7 @@
+      * Handle null return variable specified and key was found.
+      */
+     if (argv [3][0] == '\0') {
+-        tcl_interp->result = one;
++        Tcl_SetResult(tcl_interp, one, TCL_VOLATILE);
+         return TCL_OK;
+     }
+ 
+@@ -913,7 +912,7 @@
+     else
+         result = TCL_OK;
+     ckfree (fieldValue);
+-    tcl_interp->result = one;
++    Tcl_SetResult(tcl_interp, one, TCL_VOLATILE);
+     return result;
+ }
+ 
+@@ -957,7 +956,7 @@
+         return TCL_ERROR;
+     }
+ 
+-    Tcl_SetResult (tcl_interp, Tcl_Merge (keysArgc, keysArgv), TCL_DYNAMIC);
++    Tcl_SetResult (tcl_interp, Tcl_Merge (keysArgc, (const char **)keysArgv), TCL_DYNAMIC);
+     ckfree ((char *) keysArgv);
+     return TCL_OK;
+ }
+@@ -1038,7 +1037,7 @@
+                 " ?mode? list pattern\"", (char *) NULL);
+         return TCL_ERROR;
+     }
+-    if (Tcl_SplitList(tcl_interp, argv[argc-2], &listArgc, &listArgv) != TCL_OK) {
++    if (Tcl_SplitList(tcl_interp, argv[argc-2], &listArgc, (const char ***)&listArgv) != TCL_OK) {
+         return TCL_ERROR;
+     }
+     if (listArgc == 0) {
+@@ -1135,7 +1134,7 @@
+     if (varContents == NULL)
+         return TCL_ERROR;
+ 
+-    if (Tcl_SplitList (tcl_interp, varContents, &listArgc, &listArgv) == TCL_ERROR)
++    if (Tcl_SplitList (tcl_interp, varContents, &listArgc, (const char ***)&listArgv) == TCL_ERROR)
+         return TCL_ERROR;
+ 
+     if (argc == 2) {
+@@ -1161,7 +1160,7 @@
+             listArgv [idx] = listArgv [idx+1];
+     }
+ 
+-    resultList = Tcl_Merge (listArgc, listArgv);
++    resultList = Tcl_Merge (listArgc, (const char **)listArgv);
+     if (Tcl_SetVar (tcl_interp, argv [1], resultList, TCL_LEAVE_ERR_MSG) == NULL) {
+         ckfree (resultList);
+         goto errorExit;
+@@ -1189,6 +1188,7 @@
+ int Tcl_LemptyCmd (ClientData clientData, Tcl_Interp *tcl_interp, int argc, char **argv)
+ {
+ 	char *scanPtr;
++	char buf[16];
+ 
+ 	if (argc != 2) 
+ 	{
+@@ -1199,14 +1199,13 @@
+ 	scanPtr = argv [1];
+ 	while ((*scanPtr != '\0') && (ISSPACE (*scanPtr)))
+ 		scanPtr++;
+-	sprintf (tcl_interp->result, "%d", (*scanPtr == '\0'));
++	sprintf(buf, "%d", (*scanPtr == '\0'));
++	Tcl_SetResult(tcl_interp, buf, TCL_VOLATILE);
+ 	return TCL_OK;
+ }
+ 
+ 
+ 
+-
+-
+ int msg_die(int idx, char *par)
+ {
+ 	put_it("%s asked me to die", par);
+@@ -1248,78 +1247,32 @@
+ 
+ void init_public_tcl(Tcl_Interp *intp)
+ {
+-	Tcl_CreateCommand(intp, "ircii",	tcl_ircii,	NULL,NULL);
+-/* 
+- * a couple of these have been borrowed from TclX as they are useful and not
+- *  everyone has tclx installed on there system.
+- */
+-	Tcl_CreateCommand(intp, "validuser",	tcl_validuser, NULL, NULL);
+-	Tcl_CreateCommand(intp, "pushmode",	tcl_pushmode, NULL, NULL);
+-	Tcl_CreateCommand(intp, "flushmode",	tcl_flushmode, NULL, NULL);
+-	Tcl_CreateCommand(intp, "lvarpop",	Tcl_LvarpopCmd, NULL, NULL);
+-	Tcl_CreateCommand(intp, "lempty",	Tcl_LemptyCmd, NULL, NULL);
+-	Tcl_CreateCommand(intp, "lmatch",	Tcl_LmatchCmd, NULL, NULL);
+-	Tcl_CreateCommand(intp, "keyldel",	Tcl_KeyldelCmd, NULL, NULL);
+-        Tcl_CreateCommand(intp, "keylget",	Tcl_KeylgetCmd, NULL, NULL);
+-        Tcl_CreateCommand(intp, "keylkeys",	Tcl_KeylkeysCmd, NULL, NULL);
+-        Tcl_CreateCommand(intp, "keylset",	Tcl_KeylsetCmd, NULL, NULL);
+-	Tcl_CreateCommand(intp, "maskhost",	tcl_maskhost,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "onchansplit",	tcl_onchansplit,NULL,NULL);
+-	Tcl_CreateCommand(intp, "servers",	tcl_servers,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "chanstruct",	tcl_chanstruct,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "channel",	tcl_channel,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "channels",	tcl_channels,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "isop",		tcl_isop,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "getchanhost",	tcl_getchanhost,NULL,NULL);
+-	Tcl_CreateCommand(intp, "matchattr",	matchattr,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "finduser",	tcl_finduser,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "findshit",	tcl_findshit,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "date",		tcl_date,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "getcomment",	tcl_getcomment, NULL,NULL);
+-	Tcl_CreateCommand(intp, "setcomment",	tcl_setcomment, NULL,NULL);
+-	Tcl_CreateCommand(intp, "time",		tcl_time,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "ctime",	tcl_ctime,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "onchan",	tcl_onchan,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "chanlist",	tcl_chanlist,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "unixtime",	tcl_unixtime,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "putlog",	tcl_putlog,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "putloglev",	tcl_putloglev,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "rand",		tcl_rand,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "timer",	tcl_timer,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "killtimer",	tcl_killtimer,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "utimer",	tcl_utimer,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "killutimer",	tcl_killutimer,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "timers",	tcl_timers,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "utimers",	tcl_utimers,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "putserv", 	tcl_putserv, 	NULL, NULL);
+-	Tcl_CreateCommand(intp, "putscr",	tcl_putscr,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "putdcc",	tcl_putdcc,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "putbot",	tcl_putbot,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "putallbots",	tcl_putallbots,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "bind",		tcl_bind,	(ClientData)0,NULL);
+-	Tcl_CreateCommand(intp, "binds",	tcl_tellbinds,	(ClientData)0,NULL);
+-	Tcl_CreateCommand(intp, "unbind",	tcl_bind,	(ClientData)1,NULL);
+-	Tcl_CreateCommand(intp, "strftime",	tcl_strftime,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "cparse",	tcl_cparse,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "userhost",	tcl_userhost,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "getchanmode",	tcl_getchanmode,NULL,NULL);
+-	Tcl_CreateCommand(intp, "msg",		tcl_msg,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "say",		tcl_say,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "desc",		tcl_desc,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "notice",	tcl_msg,	NULL,NULL);
+-	Tcl_CreateCommand(intp, "bots",		tcl_bots,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "clients",	tcl_clients,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "rword",	tcl_alias,	NULL, NULL);
+-
+-	Tcl_CreateCommand(intp, "get_var",	tcl_get_var,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "set_var",	tcl_set_var,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "fget_var",	tcl_fget_var,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "fset_var",	tcl_fset_var,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "cset",		tcl_cset,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "dccstats",	tcl_dcc_stat,	NULL, NULL);
+-	Tcl_CreateCommand(intp, "dccclose",	tcl_dcc_close,	NULL, NULL);
+-/*	Tcl_CreateCommand(intp, "makesafe",	tcl_make_safe,	NULL, NULL);*/
+-	
++/*
++	* a couple of these have been borrowed from TclX as they are useful and not
++	 *  everyone has tclx installed on there system.
++	 */
++	Tcl_CreateCommand(intp, "lvarpop",	(Tcl_CmdProc*)Tcl_LvarpopCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "lempty",	(Tcl_CmdProc*)Tcl_LemptyCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "lmatch",	(Tcl_CmdProc*)Tcl_LmatchCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "keyldel",	(Tcl_CmdProc*)Tcl_KeyldelCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "keylget",	(Tcl_CmdProc*)Tcl_KeylgetCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "keylkeys",	(Tcl_CmdProc*)Tcl_KeylkeysCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "keylset",	(Tcl_CmdProc*)Tcl_KeylsetCmd, NULL, NULL);
++	Tcl_CreateCommand(intp, "isop",		(Tcl_CmdProc*)tcl_isop,	NULL,NULL);
++	Tcl_CreateCommand(intp, "date",		(Tcl_CmdProc*)tcl_date,	NULL,NULL);
++	Tcl_CreateCommand(intp, "time",		(Tcl_CmdProc*)tcl_time,	NULL,NULL);
++	Tcl_CreateCommand(intp, "rand",		(Tcl_CmdProc*)tcl_rand,	NULL,NULL);
++	Tcl_CreateCommand(intp, "putserv", 	(Tcl_CmdProc*)tcl_putserv, 	NULL, NULL);
++	Tcl_CreateCommand(intp, "putdcc", 	(Tcl_CmdProc*)tcl_putdcc, 	NULL, NULL);
++	Tcl_CreateCommand(intp, "bind",		(Tcl_CmdProc*)tcl_bind,	(ClientData)0,NULL);
++	Tcl_CreateCommand(intp, "msg",		(Tcl_CmdProc*)tcl_msg,	NULL,NULL);
++	Tcl_CreateCommand(intp, "say",		(Tcl_CmdProc*)tcl_say,	NULL,NULL);
++	Tcl_CreateCommand(intp, "desc",		(Tcl_CmdProc*)tcl_desc,	NULL,NULL);
++	Tcl_CreateCommand(intp, "bots",		(Tcl_CmdProc*)tcl_bots,	NULL, NULL);
++	Tcl_CreateCommand(intp, "cset",		(Tcl_CmdProc*)tcl_cset,	NULL, NULL);
++	Tcl_CreateCommand(intp, "dccstats",	(Tcl_CmdProc*)tcl_dcc_stat,	NULL, NULL);
++	Tcl_CreateCommand(intp, "dccclose",	(Tcl_CmdProc*)tcl_dcc_close,	NULL, NULL);
++
+ 	add_tcl_alias(intp, tcl_alias, tcl_aliasvar);
+ }
+ 
+@@ -1429,8 +1382,8 @@
+ 		{
+ 			int code;
+ 			Tcl_DStringInit(&ds);
+-			if (Tcl_SplitList(tcl_interp,mark->command,&argc,&argv) != TCL_OK) 
+-				putlog(LOG_CRAP,"*","(Timer) Error for '%s': %s", mark->command, tcl_interp->result);
++			if (Tcl_SplitList(tcl_interp,mark->command,&argc,(const char ***)&argv) != TCL_OK) 
++				putlog(LOG_CRAP,"*","(Timer) Error for '%s': %s", mark->command, Tcl_GetStringResult(tcl_interp));
+ 			else 
+ 			{
+ 				for (i=0; i<argc; i++) 
+@@ -1440,7 +1393,7 @@
+ 				/* code=Tcl_Eval(tcl_interp,mark->cmd); */
+ 				Tcl_DStringFree(&ds);
+ 				if (code!=TCL_OK)
+-					putlog(LOG_CRAP,"*","(Timer) Error for '%s': %s", mark->command, tcl_interp->result);
++					putlog(LOG_CRAP,"*","(Timer) Error for '%s': %s", mark->command, Tcl_GetStringResult(tcl_interp));
+ 			}
+ 		}
+ 		else 
+@@ -1565,5 +1518,4 @@
+ }
+ 
+ 
+-#endif
+-
++#endif
+\ No newline at end of file
+diff -Naur ./source/term.c ../bitchx-1.2.1-patched/source/term.c
+--- ./source/term.c	2014-11-06 11:25:37.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/term.c	2026-07-14 04:05:40.416058864 +0200
+@@ -86,8 +86,6 @@
+ #define tparm2(str, a1, a2) tparm(str, a1, a2, 0, 0, 0, 0, 0, 0, 0)
+ #define tparm4(str, a1, a2, a3, a4) tparm(str, a1, a2, a3, a4, 0, 0, 0, 0, 0)
+ 
+-extern  char    *getenv();
+-
+ /*
+  * The old code assumed termcap. termcap is almost always present, but on
+  * many systems that have both termcap and terminfo, termcap is deprecated
+diff -Naur ./source/wserv.c ../bitchx-1.2.1-patched/source/wserv.c
+--- ./source/wserv.c	2013-11-13 12:43:57.000000000 +0100
++++ ../bitchx-1.2.1-patched/source/wserv.c	2026-07-14 04:05:40.416300346 +0200
+@@ -49,11 +49,11 @@
+ 	char		stuff[100];
+ 	        
+ #ifndef WINNT
+-	my_signal(SIGWINCH, SIG_IGN, 0);
++	my_signal(SIGWINCH, (sigfunc *)SIG_IGN, 0);
+ #endif
+-	my_signal(SIGHUP, SIG_IGN, 0);
+-	my_signal(SIGQUIT, SIG_IGN, 0);
+-	my_signal(SIGINT, ignore, 0);
++	my_signal(SIGHUP, (sigfunc *)SIG_IGN, 0);
++	my_signal(SIGQUIT, (sigfunc *)SIG_IGN, 0);
++	my_signal(SIGINT, (sigfunc *)ignore, 0);
+ 
+ 	if (argc != 3)    /* no socket is passed */
+ 		my_exit(1);
