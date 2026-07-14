@@ -1,5 +1,8 @@
 # PHP Legacy Patches
 
+![Gentoo-Tested](https://img.shields.io/badge/Gentoo-tested-purple?style=flat-square)
+![GCC-15](https://img.shields.io/badge/GCC-15.3-blue?style=flat-square)
+
 ## PHP 7.4.x
 * **Official Release Archives:** [php.net/releases](https://www.php.net/releases/)
 * **Latest Source Archive:** [php-7.4.33.tar.bz2](https://www.php.net/distributions/php-7.4.33.tar.bz2)
