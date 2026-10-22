@@ -21,7 +21,7 @@ CVE-2026-109619](https://www.wiz.io/blog/php2shell-php-rce) security fixes.
 2. **Download the patch** and place it directly into the root of the extracted source directory.
 3. **Apply the patch** by running:
    ```bash
-   xzcat php74-modernlinux.patch.gz | patch -p1
+   xzcat php74-modernlinux.patch.xz | patch -p1
    ```
 4. **Regenerate the configure script**:
    ```bash
@@ -66,8 +66,8 @@ This patch has been successfully compiled and verified against the following mod
 
 * **OS:** Gentoo Linux (Profile 23.0, amd64)
 * **Compiler:** GCC 15.3.0
-* **Crypto Library:** OpenSSL 3.5.7
-* **XML Parser:** libxml2 2.15.3
+* **Crypto Library:** OpenSSL 3.5.8
+* **XML Parser:** libxml2 2.15.4
 * **Database Driver:** MariaDB 10.6.27
 * **Regular Expressions:** oniguruma 6.9.10
 * **Internationalization (i18n):** ICU 78.3
