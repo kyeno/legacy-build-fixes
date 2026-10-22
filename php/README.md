@@ -6,9 +6,12 @@
 ## PHP 7.4.x
 * **Official Release Archives:** [php.net/releases](https://www.php.net/releases/)
 * **Latest Source Archive:** [php-7.4.33.tar.bz2](https://www.php.net/distributions/php-7.4.33.tar.bz2)
-* **Required Patch:** [php74-modernlinux.patch](./php74-modernlinux.patch)
+* **Required Patch:** [php74-modernlinux.patch.xz](./php74-modernlinux.patch.xz)
 
 This patch introduces the necessary modifications to compile PHP 7.4 on modern Linux distributions, resolving build failures caused by recent toolchains and updated core libraries (GCC 15+, OpenSSL 3.x, etc.).
+
+**NOTE**: It also includes [CVE-2026-109618 and
+CVE-2026-109619](https://www.wiz.io/blog/php2shell-php-rce) security fixes.
 
 ---
 
@@ -18,7 +21,7 @@ This patch introduces the necessary modifications to compile PHP 7.4 on modern L
 2. **Download the patch** and place it directly into the root of the extracted source directory.
 3. **Apply the patch** by running:
    ```bash
-   patch -p1 < php74-modernlinux.patch
+   xzcat php74-modernlinux.patch.gz | patch -p1
    ```
 4. **Regenerate the configure script**:
    ```bash
