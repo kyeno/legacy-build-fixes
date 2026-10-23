@@ -3,25 +3,35 @@
 ![Gentoo-Tested](https://img.shields.io/badge/Gentoo-tested-purple?style=flat-square)
 ![GCC-15](https://img.shields.io/badge/GCC-15.3-blue?style=flat-square)
 
-## PHP 7.4.x
+
 * **Official Release Archives:** [php.net/releases](https://www.php.net/releases/)
+These patches introduces the necessary modifications to compile legacy PHP releases on modern Linux distributions, resolving build failures caused by recent toolchains and updated core libraries (GCC 15+, OpenSSL 3.x, libxml2, etc.).
+
+---
+
+## PHP 7.4.x
 * **Latest Source Archive:** [php-7.4.33.tar.bz2](https://www.php.net/distributions/php-7.4.33.tar.bz2)
 * **Required Patch:** [php74-modernlinux.patch.xz](./php74-modernlinux.patch.xz)
 
-This patch introduces the necessary modifications to compile PHP 7.4 on modern Linux distributions, resolving build failures caused by recent toolchains and updated core libraries (GCC 15+, OpenSSL 3.x, etc.).
-
 **NOTE**: It also includes [CVE-2026-109618 and
 CVE-2026-109619](https://www.wiz.io/blog/php2shell-php-rce) security fixes.
+
+## PHP 5.4.X
+* **Latest Source Archive:** [php-5.4.45.tar.bz2](https://www.php.net/distributions/php-5.4.45.tar.bz2)
+* **Required Patch:** [php54-modernlinux.patch.xz](./php54-modernlinux.patch.xz)
+
+**NOTE**: It **DOES NOT** include[CVE-2026-109618 and
+CVE-2026-109619](https://www.wiz.io/blog/php2shell-php-rce) security fixes!
 
 ---
 
 ## Build Instructions
 
-1. **Download and extract** the latest PHP 7.4.33 source archive.
+1. **Download and extract** the latest PHP source archive.
 2. **Download the patch** and place it directly into the root of the extracted source directory.
 3. **Apply the patch** by running:
    ```bash
-   xzcat php74-modernlinux.patch.xz | patch -p1
+   xzcat php_VERSION_-modernlinux.patch.xz | patch -p1
    ```
 4. **Regenerate the configure script**:
    ```bash
@@ -62,7 +72,7 @@ Below is a confirmed working `./configure` setup for a modern, feature-rich depl
 
 ## Tested Environment (Build Stack)
 
-This patch has been successfully compiled and verified against the following modern, rolling-release environment:
+These patches has been successfully compiled and verified against the following modern, rolling-release environment:
 
 * **OS:** Gentoo Linux (Profile 23.0, amd64)
 * **Compiler:** GCC 15.3.0
