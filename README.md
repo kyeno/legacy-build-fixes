@@ -9,7 +9,7 @@ This repository aims to bridge that gap by providing patches, workarounds, and n
 > ⚠️ **Security Warning:**
 > Compiling legacy software on a modern stack does **not** fix inherent security vulnerabilities within the application itself. Deploying these programs may expose your system to risks. Use at your own discretion, preferably within isolated or sandboxed environments.
 
-**NOTE**: PHP7 patch now includes [CVE-2026-109618 and CVE-2026-109619](https://www.wiz.io/blog/php2shell-php-rce) security fixes.
+**PHP patches:** The PHP 7.4 patch includes backports for CVE-2026-109618 and CVE-2026-109619. PHP 5.4 has separate build-only and build-plus-CVE variants; see the [PHP guide](php/README.md) for their limits and build instructions.
 
 ## License & Disclaimer
 
